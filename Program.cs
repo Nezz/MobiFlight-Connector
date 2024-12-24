@@ -18,9 +18,6 @@ namespace MobiFlight
         {
             if (mutex.WaitOne(TimeSpan.Zero, true))
             {
-                // if (Environment.OSVersion.Version.Major >= 6)
-                //      SetProcessDPIAware();
-
                 CheckForCorruptSettings();
 
                 // this is needed for correct conversion
@@ -28,7 +25,7 @@ namespace MobiFlight
                 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
                 
                 Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(true);
+                Application.SetCompatibleTextRenderingDefault(false);
                 Application.Run(new MainForm());
                 mutex.ReleaseMutex();
             }
@@ -90,8 +87,5 @@ namespace MobiFlight
                 }
             }
         }
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern bool SetProcessDPIAware();
     }
 }
