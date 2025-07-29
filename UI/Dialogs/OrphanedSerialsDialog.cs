@@ -1,4 +1,4 @@
-﻿using MobiFlight.Base;
+using MobiFlight.Base;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -41,10 +41,11 @@ namespace MobiFlight.UI.Dialogs
             }
 
             InitializeComponent();
-            updateOrphanedList();
+            
+            UpdateOrphanedList();
         }
 
-        protected void updateOrphanedList()
+        private void UpdateOrphanedList()
         {
             List<string> configSerials = new List<string>();
             
@@ -56,19 +57,21 @@ namespace MobiFlight.UI.Dialogs
                 connectedModulesComboBox.Items.Add(serial);
             }
 
-            allConfigItems.ForEach(configItems =>
+            var configItems = allConfigItems.SelectMany(c => c).Where(c => c != null).ToList();
+            var deviceNames = configItems.Select(c => c.Name).ToList();
+            
+            // Auto-assign orphaned serials when all device names in the profile are unique
+            var autoAssign = deviceNames.Count == deviceNames.Distinct().Count();
+            
+            foreach (var cfg in configItems)
             {
-                configItems.ForEach(cfg =>
-                {
-                    if (cfg == null) return;
-                    CheckAndAddConfigSerial(cfg.ModuleSerial, configSerials);
-                });
-            });
+                CheckAndAddConfigSerial(cfg.ModuleSerial, configSerials, autoAssign);
+            }
 
             if (connectedModulesComboBox.Items.Count > 0) connectedModulesComboBox.SelectedIndex = 0;
         }
 
-        private void CheckAndAddConfigSerial(string configSerial, List<string> configSerials)
+        private void CheckAndAddConfigSerial(string configSerial, List<string> configSerials, bool autoAssign)
         {
             if (configSerial != "" &&
                 configSerial != "-" &&
@@ -82,13 +85,59 @@ namespace MobiFlight.UI.Dialogs
 
                 if (showOrphanedJoystick || showOrphanedModule || showOrphanedArcaze)
                 { 
+                    string orphanedDeviceName = SerialNumber.ExtractDeviceName(configSerial);
+                    if (!string.IsNullOrEmpty(orphanedDeviceName))
+                    {
+                        // Find a connected device with matching name
+                        string matchingConnectedSerial = FindConnectedSerialByDeviceName(orphanedDeviceName, serialNumber);
+                        
+                        if (!string.IsNullOrEmpty(matchingConnectedSerial))
+                        {
+                            ReplaceSerialBySerial(configSerial, matchingConnectedSerial);
+                            changed = true;
+                            return;
+                        }
+                    }
+                    
                     configSerials.Add(configSerial);
                     orphanedSerialsListBox.Items.Add(configSerial);
                 }
             }
         }
 
-        protected void replaceSerialBySerial(string oldSerial, string newSerial)
+        /// <summary>
+        /// Finds a connected serial that matches the device name and serial type
+        /// </summary>
+        private string FindConnectedSerialByDeviceName(string deviceName, string orphanedSerial)
+        {
+            List<string> candidateSerials;
+            if (SerialNumber.IsMobiFlightSerial(orphanedSerial))
+            {
+                candidateSerials = connectedModuleSerials;
+            }
+            else if (SerialNumber.IsJoystickSerial(orphanedSerial))
+            {
+                candidateSerials = connectedJoystickSerials;
+            }
+            else
+            {
+                candidateSerials = connectedArcazeSerials;
+            }
+
+            // Find matching device name
+            foreach (var connectedSerial in candidateSerials)
+            {
+                var connectedDeviceName = SerialNumber.ExtractDeviceName(connectedSerial);
+                if (string.Equals(deviceName, connectedDeviceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return connectedSerial;
+                }
+            }
+
+            return null;
+        }
+
+        private void ReplaceSerialBySerial(string oldSerial, string newSerial)
         {
             allConfigItems.ForEach(cfgItems =>
             {
@@ -156,10 +205,10 @@ namespace MobiFlight.UI.Dialogs
         {
             if (orphanedSerialsListBox.SelectedItem == null || connectedModulesComboBox.SelectedItem == null) return;
 
-            replaceSerialBySerial(orphanedSerialsListBox.SelectedItem.ToString(), 
+            ReplaceSerialBySerial(orphanedSerialsListBox.SelectedItem.ToString(), 
                                   connectedModulesComboBox.SelectedItem.ToString());
             changed = true;
-            updateOrphanedList();
+            UpdateOrphanedList();
             (sender as Button).Enabled = false;
         }
 
